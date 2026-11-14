@@ -10,7 +10,16 @@ Model::PatientRecord* SearchEngine::linearSearchByID(const std::vector<Model::Pa
 }
 
 Model::PatientRecord* SearchEngine::binarySearchByID(std::vector<Model::PatientRecord*> patients, const std::string& targetID) {
-    quickSortByID(patients, 0, static_cast<int>(patients.size()) - 1);
+    // Binary search must not change the user-visible ordering of the database.
+    for (size_t i = 1; i < patients.size(); ++i) {
+        Model::PatientRecord *key = patients[i];
+        size_t j = i;
+        while (j > 0 && patients[j - 1]->getPatientID() > key->getPatientID()) {
+            patients[j] = patients[j - 1];
+            --j;
+        }
+        patients[j] = key;
+    }
     int low = 0, high = static_cast<int>(patients.size()) - 1;
     while (low <= high) {
         int mid = low + (high - low) / 2;
@@ -29,7 +38,7 @@ Model::PatientRecord* SearchEngine::recursiveSearchByName(const std::vector<Mode
 
 void SearchEngine::selectionSortByName(std::vector<Model::PatientRecord*>& patients) {
     size_t n = patients.size();
-    for (size_t i = 0; i < n - 1; ++i) {
+    for (size_t i = 0; i + 1 < n; ++i) {
         size_t minIdx = i;
         for (size_t j = i + 1; j < n; ++j) {
             if (patients[j]->getName() < patients[minIdx]->getName()) {
