@@ -142,12 +142,38 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         QMainWindow, QWidget#appCanvas { background:#f3f6fb; color:#26364a; font-family:'Segoe UI', 'Arial'; font-size:10pt; }
         QFrame#card { background:#ffffff; border:1px solid #e3eaf2; border-radius:9px; }
         QLabel { background:transparent; }
+        QLineEdit { background: white; border: 1px solid #dce4ed; border-radius: 5px; padding: 8px 9px; color: #26364a; }
         QPushButton#primaryButton { color:white; background:#286da9; border:0; border-radius:5px; padding:7px 14px; font-weight:600; }
         QPushButton#primaryButton:hover { background:#1e5b91; }
         QPushButton#secondaryButton { color:#34465e; background:#ffffff; border:1px solid #dce4ed; border-radius:5px; padding:7px 13px; }
         QPushButton#secondaryButton:hover { background:#f5f8fc; border-color:#aebed0; }
-        QLineEdit, QComboBox, QDateEdit, QTimeEdit { background:white; border:1px solid #dce4ed; border-radius:5px; padding:8px 9px; min-height:20px; color:#26364a; }
-        QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QTimeEdit:focus { border:1px solid #347fe5; }
+       QComboBox, QDateEdit, QTimeEdit {
+    background: white;
+    border: 1px solid #dce4ed;
+    border-radius: 5px;
+    padding: 8px 9px;
+    min-height: 20px;
+    color: #26364a;
+}
+
+QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QTimeEdit:focus {
+    border: 1px solid #347fe5;
+}
+
+QComboBox QAbstractItemView {
+    background-color: white;
+    color: #26364a;
+    selection-background-color: #e8f0fe;
+    selection-color: #26364a;
+    border: 1px solid #dce4ed;
+    outline: none;
+}
+
+QComboBox QAbstractItemView::item {
+    padding: 8px;
+    min-height: 25px;
+    color: #26364a;
+}
         QTableWidget { background:white; alternate-background-color:#f8fafd; border:1px solid #e8edf3; border-radius:5px; color:#33445a; }
         QTableWidget::item { padding:7px; border:0; }
         QHeaderView::section { background:#f6f8fb; color:#718096; border:0; border-bottom:1px solid #e5ebf1; padding:10px 7px; font-weight:600; }
@@ -182,10 +208,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     pageStack->addWidget(dashboardPage);
     pageStack->addWidget(patientPage);
     pageStack->addWidget(appointmentPage);
-    pageStack->addWidget(createInfoPage("Calendar", "Your scheduled clinic visits, arranged by date."));
     pageStack->addWidget(queuePage);
-    pageStack->addWidget(createInfoPage("Doctors", "Clinical team overview. The source repository does not yet include a doctor model or directory."));
-    pageStack->addWidget(createInfoPage("Consultations", "Consultation records and visit outcomes."));
     pageStack->addWidget(searchPage);
     pageStack->addWidget(reportsPage);
     root->addWidget(pageStack, 1);
@@ -216,7 +239,7 @@ void MainWindow::createMenuBar()
     connect(undoAction, &QAction::triggered, this, &MainWindow::onUndoClicked);
     auto *reportsMenu = menuBar()->addMenu("&Reports");
     auto *analyticsAction = reportsMenu->addAction("Open analytics");
-    connect(analyticsAction, &QAction::triggered, this, [this] { navigateTo(8); });
+    connect(analyticsAction, &QAction::triggered, this, [this] { navigateTo(6); });
     auto *helpMenu = menuBar()->addMenu("&Help");
     auto *aboutAction = helpMenu->addAction("About SCAPMS");
     connect(aboutAction, &QAction::triggered, this, &MainWindow::showAbout);
@@ -252,13 +275,11 @@ QWidget *MainWindow::createSidebar()
         layout->addWidget(button);
     };
     addSection("WORKSPACE");
-    addNav("▦   Dashboard", 0); addNav("♙   Patient records", 1); addNav("▣   Appointments", 2); addNav("▦   Calendar", 3); addNav("☷   Waiting queue", 4);
-    addSection("CLINICAL");
-    addNav("✚   Doctors", 5); addNav("▣   Consultations", 6);
+    addNav("▦   Dashboard", 0); addNav("♙   Patient records", 1); addNav("▣   Appointments", 2); addNav("☷   Waiting queue", 3);
     addSection("INSIGHTS");
-    addNav("⌕   Search & Sort", 7); addNav("▦   Statistics & Analytics", 8); addNav("⚙   Reports & Admin", 8);
+    addNav("⌕   Search & Sort", 4); addNav("▦   Statistics & Analytics", 5); addNav("⚙   Reports & Admin", 6);
     layout->addStretch();
-    layout->addWidget(makeLabel("SCAPMS 2.0 · COS202 Project", 8, false, "#a9bdd5"));
+    layout->addWidget(makeLabel("SCAPMS 1.0 · COS202 Project", 8, false, "#a9bdd5"));
     return sidebar;
 }
 
@@ -288,25 +309,53 @@ QWidget *MainWindow::createDashboardPage()
     layout->setSpacing(12);
 
     auto *topBar = new QHBoxLayout;
-    topBar->addWidget(makeLabel("Dashboard", 15, true)); topBar->addStretch();
-    auto *findButton = makeButton("⌕  Find patient"); connect(findButton, &QPushButton::clicked, this, &MainWindow::showFindPatient);
+
+    // Capture the dashboard title label and make it bold, white, and larger
+    auto *dashboardTitle = makeLabel("Dashboard", 18, true);
+    dashboardTitle->setStyleSheet("color: #FFFFFF; font-weight: bold; font-size: 18pt;");
+    topBar->addWidget(dashboardTitle); 
+
+    topBar->addStretch();
+
+    auto *findButton = makeButton("⌕  Find patient"); 
+    connect(findButton, &QPushButton::clicked, this, &MainWindow::showFindPatient);
+
     auto *userBadge = makeLabel("Clinic Administrator · Administrator", 9, true, "#617187");
     userBadge->setStyleSheet("background:#edf2f8;border-radius:15px;padding:8px 12px;color:#617187;font-size:9px;font-weight:600;");
-    topBar->addWidget(findButton); topBar->addWidget(userBadge);
+
+    topBar->addWidget(findButton); 
+    topBar->addWidget(userBadge);
     layout->addLayout(topBar);
 
     auto *welcomeRow = new QHBoxLayout;
     auto *greeting = new QVBoxLayout;
-    greeting->addWidget(makeLabel("Good morning, welcome to SCAPMS", 20, true));
-    greeting->addWidget(makeLabel(QDate::currentDate().toString("dddd, d MMMM yyyy"), 9, false, Muted));
-    welcomeRow->addLayout(greeting); welcomeRow->addStretch();
-    auto *newPatient = makeButton("+  New patient", true); connect(newPatient, &QPushButton::clicked, this, [this] { navigateTo(1); });
-    auto *newAppointment = makeButton("+  Schedule appointment"); connect(newAppointment, &QPushButton::clicked, this, [this] { navigateTo(2); });
-    auto *calendarButton = makeButton("Open calendar"); connect(calendarButton, &QPushButton::clicked, this, [this] { navigateTo(3); });
-    auto *analyticsButton = makeButton("View analytics"); connect(analyticsButton, &QPushButton::clicked, this, [this] { navigateTo(8); });
-    welcomeRow->addWidget(newPatient); welcomeRow->addWidget(newAppointment); welcomeRow->addWidget(calendarButton); welcomeRow->addWidget(analyticsButton);
-    layout->addLayout(welcomeRow);
 
+    // Capture the welcome label in a variable and set its text color to white (#FFFFFF)
+    auto *welcomeLabel = makeLabel("Good day, welcome to SCAPMS", 20, true);
+    welcomeLabel->setStyleSheet("color: #FFFFFF; font-size: 20px; font-weight: bold; background-color: #347fe5; padding: 10px; border-radius: 5px;"); 
+    greeting->addWidget(welcomeLabel);
+
+    greeting->addWidget(makeLabel(QDate::currentDate().toString("dddd, d MMMM yyyy"), 9, false, Muted));
+    welcomeRow->addLayout(greeting); 
+    welcomeRow->addStretch();
+
+    auto *newPatient = makeButton("+  New patient", true); 
+    connect(newPatient, &QPushButton::clicked, this, [this] { navigateTo(1); });
+
+    auto *newAppointment = makeButton("+  Schedule appointment"); 
+    connect(newAppointment, &QPushButton::clicked, this, [this] { navigateTo(2); });
+
+    // (The calendarButton code has been removed here)
+
+    auto *analyticsButton = makeButton("View analytics"); 
+    connect(analyticsButton, &QPushButton::clicked, this, [this] { navigateTo(6); });
+
+    // Add only the buttons you want to keep to the layout (omitting calendarButton)
+    welcomeRow->addWidget(newPatient); 
+    welcomeRow->addWidget(newAppointment); 
+    welcomeRow->addWidget(analyticsButton);
+
+    layout->addLayout(welcomeRow);
     auto *metrics = new QHBoxLayout; metrics->setSpacing(10);
     const auto addMetric = [metrics](const QString &title, const QString &value, const QString &caption, const QString &accent, QLabel **valueOut = nullptr) {
         auto *card = makeCard();
@@ -490,13 +539,13 @@ void MainWindow::seedDashboardExampleData()
 {
     auto &database = clinicManager.getDatabase();
     if (!database.getPatients().empty()) return;
-    const QStringList names{"Ava Mensah", "Noah Boateng", "Mia Owusu", "Ethan Asare", "Zara Ofori", "Leo Addo", "Ama Sarpong", "Jayden Quaye", "Nia Arthur", "Kai Agyeman"};
+    const QStringList names{"John Oke", "Issac Stone", "Mary Owusu", "Ethan Bola", "Zahara Leo", "Joy Addo", "Abraham Dike", "Jayden Okeke", "Love Arthur", "Kate Samuel"};
     const QList<int> ages{24, 31, 42, 58, 27, 39, 63, 18, 48, 33};
     const QStringList types{"General", "General", "General", "General", "General", "Emergency", "Emergency", "Emergency", "Follow-Up", "Follow-Up"};
     for (int i = 0; i < names.size(); ++i) {
         const std::string id = QString("P%1").arg(i + 1, 3, 10, QLatin1Char('0')).toStdString();
         const std::string name = names[i].toStdString();
-        const std::string contact = QString("+233 20 555 %1").arg(1100 + i).toStdString();
+        const std::string contact = QString("+234 20 555 %1").arg(101 + i).toStdString();
         if (types[i] == "General") database.addPatient(new Model::GeneralPatient(id, name, ages[i], contact));
         else if (types[i] == "Emergency") database.addPatient(new Model::EmergencyPatient(id, name, ages[i], contact));
         else database.addPatient(new Model::FollowUpPatient(id, name, ages[i], contact));
@@ -514,26 +563,78 @@ void MainWindow::seedDashboardExampleData()
 
 void MainWindow::onAddPatientClicked()
 {
-    const QString id = idInput->text().trimmed();
-    const QString name = nameInput->text().trimmed();
+    QString id = idInput->text().trimmed();
+    QString rawName = nameInput->text().trimmed();
     bool ageValid = false;
-    const int age = ageInput->text().toInt(&ageValid);
-    const QString contact = contactInput->text().trimmed();
-    if (id.isEmpty() || name.isEmpty() || !ageValid || age < 1 || age > 120) {
-        showError("Enter a patient ID and name, and an age between 1 and 120."); return;
+    int age = ageInput->text().toInt(&ageValid);
+    QString contact = contactInput->text().trimmed();
+
+    // Validate ID Format (e.g., must start with 'P' followed by numbers, or match your exact pattern)
+    QRegularExpression idRegex("^P\\d+$", QRegularExpression::CaseInsensitiveOption);
+    if (!idRegex.match(id).hasMatch()) {
+        showError("Patient ID must start with 'P' followed by numbers (e.g., P011).");
+        return;
     }
-    if (clinicManager.getDatabase().findPatientByID(id.toStdString())) { showError("That patient ID is already registered."); return; }
+
+    // Validate Contact: Must be exactly 11 digits (or match a specific phone layout)
+    // Strip out non-digit characters to check the length properly
+    QString digitsOnly = contact;
+    digitsOnly.remove(QRegularExpression("\\D")); // removes spaces, plus signs, etc. for counting
+    if (digitsOnly.length() != 11) {
+        showError("Contact number must be exactly 11 digits.");
+        return;
+    }
+
+    // Format Name to Title Case (Capitalize first letter of each word, rest lowercase)
+    QStringList nameParts = rawName.split(' ', Qt::SkipEmptyParts);
+    QString formattedName = "";
+    for (QString part : nameParts) {
+        if (!part.isEmpty()) {
+            part = part.toLower();
+            part[0] = part[0].toUpper();
+            if (!formattedName.isEmpty()) formattedName += " ";
+            formattedName += part;
+        }
+    }
+
+    if (id.isEmpty() || formattedName.isEmpty() || !ageValid || age < 1 || age > 120) {
+        showError("Enter a valid patient ID, name, and an age between 1 and 120.");
+        return;
+    }
+
+    if (clinicManager.getDatabase().findPatientByID(id.toStdString())) {
+        showError("That patient ID is already registered.");
+        return;
+    }
+
     try {
         std::unique_ptr<Model::PatientRecord> patient;
-        if (typeCombo->currentText() == "General") patient = std::make_unique<Model::GeneralPatient>(id.toStdString(), name.toStdString(), age, contact.toStdString());
-        else if (typeCombo->currentText() == "Emergency") patient = std::make_unique<Model::EmergencyPatient>(id.toStdString(), name.toStdString(), age, contact.toStdString());
-        else patient = std::make_unique<Model::FollowUpPatient>(id.toStdString(), name.toStdString(), age, contact.toStdString());
-        clinicManager.registerPatient(patient.release());
-        idInput->clear(); nameInput->clear(); ageInput->clear(); contactInput->clear();
-        refreshPatientTable(); refreshDashboard(); refreshReports();
-    } catch (const std::exception &exception) { showError(QString::fromUtf8(exception.what())); }
-}
+        std::string stdId = id.toStdString();
+        std::string stdName = formattedName.toStdString();
+        std::string stdContact = contact.toStdString();
 
+        if (typeCombo->currentText() == "General") 
+            patient = std::make_unique<Model::GeneralPatient>(stdId, stdName, age, stdContact);
+        else if (typeCombo->currentText() == "Emergency") 
+            patient = std::make_unique<Model::EmergencyPatient>(stdId, stdName, age, stdContact);
+        else 
+            patient = std::make_unique<Model::FollowUpPatient>(stdId, stdName, age, stdContact);
+
+        clinicManager.registerPatient(patient.release());
+        
+        // Clear input fields after successful registration
+        idInput->clear(); 
+        nameInput->clear(); 
+        ageInput->clear(); 
+        contactInput->clear();
+        
+        refreshPatientTable(); 
+        refreshDashboard(); 
+        refreshReports();
+    } catch (const std::exception &exception) {
+        showError(QString::fromUtf8(exception.what()));
+    }
+}
 void MainWindow::onDeletePatientClicked()
 {
     QString id = idInput->text().trimmed();
