@@ -21,6 +21,7 @@ set(SOURCES
     controller/ClinicManager.cpp
     controller/SearchEngine.cpp
     gui/MainWindow.cpp
+    utils/Filehandler.cpp
 )
 
 set(HEADERS
@@ -34,6 +35,7 @@ set(HEADERS
     controller/SearchEngine.h
     gui/MainWindow.h
     utils/ClinicException.h
+    utils/Filehandler.h
 )
 
 add_executable(SCAMPS ${SOURCES} ${HEADERS})

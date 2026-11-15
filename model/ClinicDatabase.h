@@ -1,35 +1,30 @@
 #pragma once
 
+#include <vector>
+#include <string>
 #include "PatientRecord.h"
 #include "Appointment.h"
-#include <vector>
 
 namespace Model {
-
 class ClinicDatabase {
 private:
     std::vector<PatientRecord*> patients;
-    std::vector<Model::Appointment> appointments;
-
-    static const int CACHE_SIZE = 10;
-    PatientRecord* recentPatientsCache[CACHE_SIZE];
-    int cacheCount;
+    std::vector<Appointment> appointments;
 
 public:
-    ClinicDatabase();
+    ClinicDatabase() = default;
     ~ClinicDatabase();
 
     void addPatient(PatientRecord* patient);
     void deletePatient(const std::string& patientID);
-    PatientRecord* findPatientByID(const std::string& patientID);
+    PatientRecord* findPatientByID(const std::string& id);
+    const std::vector<PatientRecord*>& getPatients() const;
+    std::vector<PatientRecord*>& getPatientsMutable(); 
+    
+    void addAppointment(const Appointment& appointment);
+    const std::vector<Appointment>& getAppointments() const;
+    void cancelAppointment(const std::string& appointmentID);
 
-    std::vector<PatientRecord*>& getPatients() { return patients; }
-    const std::vector<Model::Appointment>& getAppointments() const { return appointments; }
-
-    void addAppointment(const Model::Appointment& app);
-    void cancelAppointment(const std::string& appID);
-
-    void updateRecentCache(PatientRecord* patient);
+    void clear();
 };
-
-} // namespace Model
+}

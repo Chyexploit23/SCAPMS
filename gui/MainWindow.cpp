@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "../utils/Filehandler.h"
 #include "../model/GeneralPatient.h"
 #include "../model/EmergencyPatient.h"
 #include "../model/FollowUpPatient.h"
@@ -7,6 +8,7 @@
 #include <QAction>
 #include <QColor>
 #include <QDateEdit>
+#include <QFileDialog>
 #include <QFont>
 #include <QFormLayout>
 #include <QFrame>
@@ -14,6 +16,9 @@
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QKeySequence>
 #include <QLabel>
 #include <QMap>
@@ -22,18 +27,19 @@
 #include <QPainter>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QScrollArea>
 #include <QShortcut>
 #include <QSizePolicy>
 #include <QStackedWidget>
 #include <QStringList>
 #include <QStatusBar>
+#include <QStyle>
 #include <QTableWidget>
 #include <QTimeEdit>
 #include <QVBoxLayout>
 #include <memory>
 #include <numeric>
-#include <QStyle>
 #include <utility>
 
 namespace {
@@ -147,33 +153,30 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         QPushButton#primaryButton:hover { background:#1e5b91; }
         QPushButton#secondaryButton { color:#34465e; background:#ffffff; border:1px solid #dce4ed; border-radius:5px; padding:7px 13px; }
         QPushButton#secondaryButton:hover { background:#f5f8fc; border-color:#aebed0; }
-       QComboBox, QDateEdit, QTimeEdit {
-    background: white;
-    border: 1px solid #dce4ed;
-    border-radius: 5px;
-    padding: 8px 9px;
-    min-height: 20px;
-    color: #26364a;
-}
-
-QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QTimeEdit:focus {
-    border: 1px solid #347fe5;
-}
-
-QComboBox QAbstractItemView {
-    background-color: white;
-    color: #26364a;
-    selection-background-color: #e8f0fe;
-    selection-color: #26364a;
-    border: 1px solid #dce4ed;
-    outline: none;
-}
-
-QComboBox QAbstractItemView::item {
-    padding: 8px;
-    min-height: 25px;
-    color: #26364a;
-}
+        QComboBox, QDateEdit, QTimeEdit {
+            background: white;
+            border: 1px solid #dce4ed;
+            border-radius: 5px;
+            padding: 8px 9px;
+            min-height: 20px;
+            color: #26364a;
+        }
+        QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QTimeEdit:focus {
+            border: 1px solid #347fe5;
+        }
+        QComboBox QAbstractItemView {
+            background-color: white;
+            color: #26364a;
+            selection-background-color: #e8f0fe;
+            selection-color: #26364a;
+            border: 1px solid #dce4ed;
+            outline: none;
+        }
+        QComboBox QAbstractItemView::item {
+            padding: 8px;
+            min-height: 25px;
+            color: #26364a;
+        }
         QTableWidget { background:white; alternate-background-color:#f8fafd; border:1px solid #e8edf3; border-radius:5px; color:#33445a; }
         QTableWidget::item { padding:7px; border:0; }
         QHeaderView::section { background:#f6f8fb; color:#718096; border:0; border-bottom:1px solid #e5ebf1; padding:10px 7px; font-weight:600; }
@@ -217,8 +220,7 @@ QComboBox QAbstractItemView::item {
     statusBar()->showMessage("Patients: 10  |  Appointments: 14  |  Doctors: 4  |  Waiting: 0  |  Pending: 8");
     auto *findShortcut = new QShortcut(QKeySequence("Ctrl+F"), this);
     connect(findShortcut, &QShortcut::activated, this, &MainWindow::showFindPatient);
-    auto *saveShortcut = new QShortcut(QKeySequence("Ctrl+S"), this);
-    connect(saveShortcut, &QShortcut::activated, this, [this] { QMessageBox::information(this, "Save", "Persistence is not yet connected in this repository."); });
+
     refreshPatientTable();
     refreshAppointmentTable();
     refreshWaitingQueue();
@@ -229,17 +231,141 @@ QComboBox QAbstractItemView::item {
 void MainWindow::createMenuBar()
 {
     auto *fileMenu = menuBar()->addMenu("&File");
-    auto *saveAction = fileMenu->addAction("&Save"); saveAction->setShortcut(QKeySequence::Save);
-    connect(saveAction, &QAction::triggered, this, [this] { QMessageBox::information(this, "Save", "Persistence is not yet connected in this repository."); });
+
+    // New File Action
+    auto *newAction = fileMenu->addAction("&New");
+    newAction->setShortcut(QKeySequence::New);
+    connect(newAction, &QAction::triggered, this, [this] {
+        if (QMessageBox::question(this, "New Database", "Are you sure you want to clear current data and start a new clinic database?") == QMessageBox::Yes) {
+            clinicManager.getDatabase().clear();
+            refreshPatientTable();
+            refreshAppointmentTable();
+            refreshWaitingQueue();
+            refreshDashboard();
+            refreshReports();
+            statusBar()->showMessage("Created new clinic database.");
+        }
+    });
+
+    // Save Action
+    auto *saveAction = fileMenu->addAction("&Save As...");
+    saveAction->setShortcut(QKeySequence::Save);
+    connect(saveAction, &QAction::triggered, this, [this] {
+        QString filePath = QFileDialog::getSaveFileName(this, "Save Clinic Data", "", "JSON Files (*.json);;All Files (*)");
+        if (!filePath.isEmpty()) {
+            QJsonObject rootObj;
+
+            // Serialize Patients
+            QJsonArray patientsArray;
+            for (const auto *patient : clinicManager.getDatabase().getPatients()) {
+                if (!patient) continue;
+                QJsonObject pObj;
+                pObj["id"] = QString::fromStdString(patient->getPatientID());
+                pObj["name"] = QString::fromStdString(patient->getName());
+                pObj["age"] = patient->getAge();
+                pObj["contact"] = QString::fromStdString(patient->getContactInfo());
+                pObj["type"] = QString::fromStdString(patient->getPatientType());
+                patientsArray.append(pObj);
+            }
+            rootObj["patients"] = patientsArray;
+
+            // Serialize Appointments
+            QJsonArray appointmentsArray;
+            for (const auto &appointment : clinicManager.getDatabase().getAppointments()) {
+                QJsonObject aObj;
+                aObj["appointmentId"] = QString::fromStdString(appointment.getAppointmentID());
+                aObj["patientId"] = QString::fromStdString(appointment.getPatientID());
+                aObj["date"] = QString::fromStdString(appointment.getAppointmentDate());
+                aObj["time"] = QString::fromStdString(appointment.getAppointmentTime());
+                aObj["reason"] = QString::fromStdString(appointment.getReason());
+                aObj["status"] = QString::fromStdString(appointment.getStatus());
+                appointmentsArray.append(aObj);
+            }
+            rootObj["appointments"] = appointmentsArray;
+
+            if (Filehandler::saveData(filePath, rootObj)) {
+                statusBar()->showMessage("Saved clinic data to " + filePath);
+                QMessageBox::information(this, "Success", "Clinic data saved successfully.");
+            } else {
+                QMessageBox::warning(this, "Error", "Failed to save clinic data.");
+            }
+        }
+    });
+
+    // Load Action
+    auto *loadAction = fileMenu->addAction("&Open...");
+    loadAction->setShortcut(QKeySequence::Open);
+    connect(loadAction, &QAction::triggered, this, [this] {
+        QString filePath = QFileDialog::getOpenFileName(this, "Open Clinic Data", "", "JSON Files (*.json);;All Files (*)");
+        if (!filePath.isEmpty()) {
+            QJsonObject rootObj;
+            if (Filehandler::loadData(filePath, rootObj)) {
+                clinicManager.getDatabase().clear();
+
+                // Load Patients
+                QJsonArray patientsArray = rootObj["patients"].toArray();
+                for (const auto &val : patientsArray) {
+                    QJsonObject pObj = val.toObject();
+                    std::string id = pObj["id"].toString().toStdString();
+                    std::string name = pObj["name"].toString().toStdString();
+                    int age = pObj["age"].toInt();
+                    std::string contact = pObj["contact"].toString().toStdString();
+                    QString type = pObj["type"].toString();
+
+                    if (type == "General")
+                        clinicManager.getDatabase().addPatient(new Model::GeneralPatient(id, name, age, contact));
+                    else if (type == "Emergency")
+                        clinicManager.getDatabase().addPatient(new Model::EmergencyPatient(id, name, age, contact));
+                    else
+                        clinicManager.getDatabase().addPatient(new Model::FollowUpPatient(id, name, age, contact));
+                }
+
+                // Load Appointments
+                QJsonArray appointmentsArray = rootObj["appointments"].toArray();
+                for (const auto &val : appointmentsArray) {
+                    QJsonObject aObj = val.toObject();
+                    clinicManager.getDatabase().addAppointment(Model::Appointment(
+                        aObj["appointmentId"].toString().toStdString(),
+                        aObj["patientId"].toString().toStdString(),
+                        aObj["date"].toString().toStdString(),
+                        aObj["time"].toString().toStdString(),
+                        aObj["reason"].toString().toStdString(),
+                        aObj["status"].toString().toStdString()
+                    ));
+                }
+
+                refreshPatientTable();
+                refreshAppointmentTable();
+                refreshWaitingQueue();
+                refreshDashboard();
+                refreshReports();
+                statusBar()->showMessage("Loaded clinic data from " + filePath);
+                QMessageBox::information(this, "Success", "Clinic data loaded successfully.");
+            } else {
+                QMessageBox::warning(this, "Error", "Failed to load or parse JSON file.");
+            }
+        }
+    });
+
     fileMenu->addSeparator();
-    auto *exitAction = fileMenu->addAction("E&xit"); exitAction->setShortcut(QKeySequence::Quit);
+
+    // Exit Action
+    auto *exitAction = fileMenu->addAction("E&xit");
+    exitAction->setShortcut(QKeySequence::Quit);
     connect(exitAction, &QAction::triggered, this, &QWidget::close);
+
+    // Edit Menu
     auto *editMenu = menuBar()->addMenu("&Edit");
-    auto *undoAction = editMenu->addAction("Undo last administrative operation"); undoAction->setShortcut(QKeySequence::Undo);
+    auto *undoAction = editMenu->addAction("Undo last administrative operation");
+    undoAction->setShortcut(QKeySequence::Undo);
     connect(undoAction, &QAction::triggered, this, &MainWindow::onUndoClicked);
+
+    // Reports Menu
     auto *reportsMenu = menuBar()->addMenu("&Reports");
     auto *analyticsAction = reportsMenu->addAction("Open analytics");
-    connect(analyticsAction, &QAction::triggered, this, [this] { navigateTo(6); });
+    connect(analyticsAction, &QAction::triggered, this, [this] { navigateTo(5); });
+
+    // Help Menu
     auto *helpMenu = menuBar()->addMenu("&Help");
     auto *aboutAction = helpMenu->addAction("About SCAPMS");
     connect(aboutAction, &QAction::triggered, this, &MainWindow::showAbout);
@@ -310,49 +436,44 @@ QWidget *MainWindow::createDashboardPage()
 
     auto *topBar = new QHBoxLayout;
 
-    // Capture the dashboard title label and make it bold, white, and larger
     auto *dashboardTitle = makeLabel("Dashboard", 18, true);
     dashboardTitle->setStyleSheet("color: #FFFFFF; font-weight: bold; font-size: 18pt;");
-    topBar->addWidget(dashboardTitle); 
+    topBar->addWidget(dashboardTitle);
 
     topBar->addStretch();
 
-    auto *findButton = makeButton("⌕  Find patient"); 
+    auto *findButton = makeButton("⌕  Find patient");
     connect(findButton, &QPushButton::clicked, this, &MainWindow::showFindPatient);
 
     auto *userBadge = makeLabel("Clinic Administrator · Administrator", 9, true, "#617187");
     userBadge->setStyleSheet("background:#edf2f8;border-radius:15px;padding:8px 12px;color:#617187;font-size:9px;font-weight:600;");
 
-    topBar->addWidget(findButton); 
+    topBar->addWidget(findButton);
     topBar->addWidget(userBadge);
     layout->addLayout(topBar);
 
     auto *welcomeRow = new QHBoxLayout;
     auto *greeting = new QVBoxLayout;
 
-    // Capture the welcome label in a variable and set its text color to white (#FFFFFF)
     auto *welcomeLabel = makeLabel("Good day, welcome to SCAPMS", 20, true);
-    welcomeLabel->setStyleSheet("color: #FFFFFF; font-size: 20px; font-weight: bold; background-color: #347fe5; padding: 10px; border-radius: 5px;"); 
+    welcomeLabel->setStyleSheet("color: #FFFFFF; font-size: 20px; font-weight: bold; background-color: #347fe5; padding: 10px; border-radius: 5px;");
     greeting->addWidget(welcomeLabel);
 
     greeting->addWidget(makeLabel(QDate::currentDate().toString("dddd, d MMMM yyyy"), 9, false, Muted));
-    welcomeRow->addLayout(greeting); 
+    welcomeRow->addLayout(greeting);
     welcomeRow->addStretch();
 
-    auto *newPatient = makeButton("+  New patient", true); 
+    auto *newPatient = makeButton("+  New patient", true);
     connect(newPatient, &QPushButton::clicked, this, [this] { navigateTo(1); });
 
-    auto *newAppointment = makeButton("+  Schedule appointment"); 
+    auto *newAppointment = makeButton("+  Schedule appointment");
     connect(newAppointment, &QPushButton::clicked, this, [this] { navigateTo(2); });
 
-    // (The calendarButton code has been removed here)
+    auto *analyticsButton = makeButton("View analytics");
+    connect(analyticsButton, &QPushButton::clicked, this, [this] { navigateTo(5); });
 
-    auto *analyticsButton = makeButton("View analytics"); 
-    connect(analyticsButton, &QPushButton::clicked, this, [this] { navigateTo(6); });
-
-    // Add only the buttons you want to keep to the layout (omitting calendarButton)
-    welcomeRow->addWidget(newPatient); 
-    welcomeRow->addWidget(newAppointment); 
+    welcomeRow->addWidget(newPatient);
+    welcomeRow->addWidget(newAppointment);
     welcomeRow->addWidget(analyticsButton);
 
     layout->addLayout(welcomeRow);
@@ -545,7 +666,7 @@ void MainWindow::seedDashboardExampleData()
     for (int i = 0; i < names.size(); ++i) {
         const std::string id = QString("P%1").arg(i + 1, 3, 10, QLatin1Char('0')).toStdString();
         const std::string name = names[i].toStdString();
-        const std::string contact = QString("+234 20 555 %1").arg(101 + i).toStdString();
+        const std::string contact = QString("+234 80 555 %1").arg(101 + i).toStdString();
         if (types[i] == "General") database.addPatient(new Model::GeneralPatient(id, name, ages[i], contact));
         else if (types[i] == "Emergency") database.addPatient(new Model::EmergencyPatient(id, name, ages[i], contact));
         else database.addPatient(new Model::FollowUpPatient(id, name, ages[i], contact));
@@ -569,23 +690,19 @@ void MainWindow::onAddPatientClicked()
     int age = ageInput->text().toInt(&ageValid);
     QString contact = contactInput->text().trimmed();
 
-    // Validate ID Format (e.g., must start with 'P' followed by numbers, or match your exact pattern)
     QRegularExpression idRegex("^P\\d+$", QRegularExpression::CaseInsensitiveOption);
     if (!idRegex.match(id).hasMatch()) {
         showError("Patient ID must start with 'P' followed by numbers (e.g., P011).");
         return;
     }
 
-    // Validate Contact: Must be exactly 11 digits (or match a specific phone layout)
-    // Strip out non-digit characters to check the length properly
     QString digitsOnly = contact;
-    digitsOnly.remove(QRegularExpression("\\D")); // removes spaces, plus signs, etc. for counting
+    digitsOnly.remove(QRegularExpression("\\D"));
     if (digitsOnly.length() != 11) {
         showError("Contact number must be exactly 11 digits.");
         return;
     }
 
-    // Format Name to Title Case (Capitalize first letter of each word, rest lowercase)
     QStringList nameParts = rawName.split(' ', Qt::SkipEmptyParts);
     QString formattedName = "";
     for (QString part : nameParts) {
@@ -613,28 +730,28 @@ void MainWindow::onAddPatientClicked()
         std::string stdName = formattedName.toStdString();
         std::string stdContact = contact.toStdString();
 
-        if (typeCombo->currentText() == "General") 
+        if (typeCombo->currentText() == "General")
             patient = std::make_unique<Model::GeneralPatient>(stdId, stdName, age, stdContact);
-        else if (typeCombo->currentText() == "Emergency") 
+        else if (typeCombo->currentText() == "Emergency")
             patient = std::make_unique<Model::EmergencyPatient>(stdId, stdName, age, stdContact);
-        else 
+        else
             patient = std::make_unique<Model::FollowUpPatient>(stdId, stdName, age, stdContact);
 
         clinicManager.registerPatient(patient.release());
-        
-        // Clear input fields after successful registration
-        idInput->clear(); 
-        nameInput->clear(); 
-        ageInput->clear(); 
+
+        idInput->clear();
+        nameInput->clear();
+        ageInput->clear();
         contactInput->clear();
-        
-        refreshPatientTable(); 
-        refreshDashboard(); 
+
+        refreshPatientTable();
+        refreshDashboard();
         refreshReports();
     } catch (const std::exception &exception) {
         showError(QString::fromUtf8(exception.what()));
     }
 }
+
 void MainWindow::onDeletePatientClicked()
 {
     QString id = idInput->text().trimmed();
@@ -667,10 +784,16 @@ void MainWindow::onSearchClicked()
 
 void MainWindow::onSortClicked()
 {
-    auto &patients = clinicManager.getDatabase().getPatients();
-    if (sortAlgCombo->currentIndex() == 0) Controller::SearchEngine::selectionSortByName(patients);
-    else if (sortAlgCombo->currentIndex() == 1) Controller::SearchEngine::insertionSortByAge(patients);
-    else Controller::SearchEngine::quickSortByID(patients, 0, static_cast<int>(patients.size()) - 1);
+    // Use the mutable reference so sorting algorithms can modify the list order
+    auto &patients = clinicManager.getDatabase().getPatientsMutable(); 
+    
+    if (sortAlgCombo->currentIndex() == 0) 
+        Controller::SearchEngine::selectionSortByName(patients);
+    else if (sortAlgCombo->currentIndex() == 1) 
+        Controller::SearchEngine::insertionSortByAge(patients);
+    else 
+        Controller::SearchEngine::quickSortByID(patients, 0, static_cast<int>(patients.size()) - 1);
+        
     refreshPatientTable();
 }
 
